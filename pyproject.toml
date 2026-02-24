@@ -1,0 +1,32 @@
+[project]
+name = "omni-retrieval"
+version = "0.1.0"
+description = "Modular RAG pipeline with swappable stages"
+requires-python = ">=3.10"
+readme = "README.md"
+dependencies = [
+	"llama-index-core",
+	"llama-index-llms-openai-like",
+	"llama-index-embeddings-openai",
+	"llama-index-vector-stores-qdrant",
+	"qdrant-client",
+	"pyyaml",
+	"pydantic",
+	"python-dotenv",
+	"click",
+	"rich",
+	"datasets",
+]
+
+[dependency-groups]
+dev = [
+	"ruff",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
