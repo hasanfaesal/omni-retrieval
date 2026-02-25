@@ -10,6 +10,7 @@ Modular RAG pipeline with swappable stages for multi-hop question answering.
 - uv (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 - Qdrant running locally (`docker run -p 6333:6333 qdrant/qdrant`)
 - DashScope API key (for Qwen3 LLM + embeddings) or any other LLM/Embedding provider of your choice
+- Optional: Hugging Face token (`HF_TOKEN`) for authenticated dataset access/rate limits
 
 ### Setup
 
