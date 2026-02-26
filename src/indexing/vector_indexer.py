@@ -1,8 +1,8 @@
 """
-Vector indexer using Qdrant (dense-only for Phase 1).
+Vector indexer using Qdrant.
 
-Handles creating, populating, and loading a Qdrant-backed VectorStoreIndex.
-Hybrid search (dense + BM25/sparse) will be enabled in Phase 2.
+Phase 1: Dense-only
+Phase 2: Supports hybrid search (dense + BM25/sparse) via enable_hybrid flag.
 """
 
 from llama_index.core import StorageContext, VectorStoreIndex
@@ -13,22 +13,28 @@ from src.context import AppContext
 from src.indexing.chunker import chunk_documents
 
 
-def _get_vector_store(ctx: AppContext) -> QdrantVectorStore:
+def _get_vector_store(
+    ctx: AppContext, enable_hybrid: bool = False
+) -> QdrantVectorStore:
     return QdrantVectorStore(
         client=ctx.qdrant_client,
         collection_name=ctx.config.qdrant.collection_name,
+        enable_hybrid=enable_hybrid,
+        fastembed_sparse_model="Qdrant/bm25" if enable_hybrid else None,
     )
 
 
 def index_documents(
     documents: list[Document],
     ctx: AppContext,
+    enable_hybrid: bool = False,
 ) -> VectorStoreIndex:
     """Chunk documents, embed them, and store in Qdrant.
 
     Args:
         documents: List of LlamaIndex Document objects to index.
         ctx: Application context (config + initialized services).
+        enable_hybrid: If True, enable hybrid search (dense + sparse BM25).
 
     Returns:
         VectorStoreIndex connected to the populated Qdrant collection.
@@ -37,7 +43,7 @@ def index_documents(
     nodes = chunk_documents(documents, ctx.config.chunking)
 
     # Create Qdrant vector store and storage context
-    vector_store = _get_vector_store(ctx)
+    vector_store = _get_vector_store(ctx, enable_hybrid=enable_hybrid)
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
 
     # Build index from nodes (embeds and upserts into Qdrant)
@@ -49,14 +55,15 @@ def index_documents(
     return index
 
 
-def load_index(ctx: AppContext) -> VectorStoreIndex:
+def load_index(ctx: AppContext, enable_hybrid: bool = False) -> VectorStoreIndex:
     """Load an existing Qdrant-backed index (reconnect to existing collection).
 
     Args:
         ctx: Application context (config + initialized services).
+        enable_hybrid: If True, enable hybrid search mode for the collection.
 
     Returns:
         VectorStoreIndex connected to the existing Qdrant collection.
     """
-    vector_store = _get_vector_store(ctx)
+    vector_store = _get_vector_store(ctx, enable_hybrid=enable_hybrid)
     return VectorStoreIndex.from_vector_store(vector_store=vector_store)

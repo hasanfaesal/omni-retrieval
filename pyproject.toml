@@ -9,6 +9,7 @@ dependencies = [
 	"llama-index-llms-openai-like",
 	"llama-index-embeddings-openai",
 	"llama-index-vector-stores-qdrant",
+	"llama-index-readers-file",
 	"qdrant-client",
 	"pyyaml",
 	"pydantic",
@@ -16,6 +17,10 @@ dependencies = [
 	"click",
 	"rich",
 	"datasets",
+	"fastembed",
+	"dashscope",
+	"ragas",
+	"llama-index-retrievers-bm25",
 ]
 
 [dependency-groups]

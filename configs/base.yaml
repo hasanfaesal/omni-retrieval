@@ -1,17 +1,15 @@
 # Omni-Retrieval Base Configuration
-# Phase 1: Minimal Viable RAG
+# Phase 2: Hybrid Search + Reranking + Baseline Eval
 
 llm:
   model_name: "qwen-flash"
   api_base: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
-  api_key_env: "DASHSCOPE_API_KEY"
   temperature: 0.1
   max_tokens: 1024
 
 embedding:
   model_name: "text-embedding-v4"
   api_base: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
-  api_key_env: "DASHSCOPE_API_KEY"
   dimensions: 1024
 
 chunking:
@@ -22,6 +20,7 @@ qdrant:
   host: "localhost"
   port: 6333
   collection_name: "hotpotqa"
+  collection_name_hybrid: "hotpotqa_hybrid"
 
 reranking:
   model_name: "qwen3-rerank"

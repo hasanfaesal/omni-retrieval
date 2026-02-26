@@ -1,17 +1,39 @@
 """
-Ingest script: Load datasets, chunk, and index into Qdrant.
+Ingest script: Load datasets or local files, chunk, and index into Qdrant.
 
 Phase 1: HotpotQA distractor split, dense-only indexing.
+Supports local PDF files for custom data ingestion.
 
 Usage:
+    # Ingest from HuggingFace dataset
     python scripts/ingest.py --dataset hotpotqa --limit 200
-    python scripts/ingest.py --dataset hotpotqa --limit 200 --config configs/base.yaml
+
+    # Ingest from local PDF file
+    python scripts/ingest.py --file data/tiny_aya_tech_report.pdf
+    python scripts/ingest.py --file data/tiny_aya_tech_report.pdf --collection aya_report
+
+    # With custom config
+    python scripts/ingest.py --file data/tiny_aya_tech_report.pdf --config configs/base.yaml
+
+    # Checking Qdrant Documents
+    # List all collections
+    curl -s http://localhost:6333/collections
+    # View collection details
+    curl -s http://localhost:6333/collections/aya_report
+    # View sample documents
+    curl -s "http://localhost:6333/collections/aya_report/points/scroll" \
+    -H "Content-Type: application/json" \
+    -d '{"limit": 5, "with_payload": true}'
+    # Or open dashboard
+    http://localhost:6333/dashboard
 """
 
 import os
+from pathlib import Path
 
 import click
 from llama_index.core.schema import Document
+from llama_index.readers.file import PDFReader
 from rich.console import Console
 from rich.progress import Progress
 
@@ -98,18 +120,60 @@ def load_hotpotqa(limit: int = 200) -> list[Document]:
     return documents
 
 
+def load_pdf_file(file_path: str) -> list[Document]:
+    """Load a local PDF file using LlamaIndex's PDFReader.
+
+    Args:
+        file_path: Path to the PDF file.
+
+    Returns:
+        List of LlamaIndex Document objects.
+    """
+    path = Path(file_path)
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {file_path}")
+
+    console.print(f"[bold blue]Loading PDF file: {file_path}[/]")
+
+    reader = PDFReader()
+    documents = reader.load_data(file_path)
+
+    for doc in documents:
+        doc.metadata = doc.metadata or {}
+        doc.metadata["source_file"] = path.name
+        doc.metadata["source_type"] = "pdf"
+        doc.excluded_llm_metadata_keys = ["source_file"]
+        doc.excluded_embed_metadata_keys = ["source_file"]
+
+    console.print(f"[bold green]Loaded {len(documents)} pages from PDF.[/]")
+    return documents
+
+
 @click.command()
 @click.option(
     "--dataset",
     type=click.Choice(["hotpotqa"]),
-    default="hotpotqa",
-    help="Dataset to ingest.",
+    default=None,
+    help="HuggingFace dataset to ingest.",
+)
+@click.option(
+    "--file",
+    "file_path",
+    type=click.Path(exists=True),
+    default=None,
+    help="Local file to ingest (PDF, txt, etc.).",
+)
+@click.option(
+    "--collection",
+    type=str,
+    default=None,
+    help="Qdrant collection name. Defaults to config value.",
 )
 @click.option(
     "--limit",
     type=int,
     default=200,
-    help="Maximum number of samples to load.",
+    help="Maximum number of samples (for datasets).",
 )
 @click.option(
     "--config",
@@ -118,19 +182,60 @@ def load_hotpotqa(limit: int = 200) -> list[Document]:
     default=None,
     help="Path to config YAML file. Defaults to configs/base.yaml.",
 )
-def main(dataset: str, limit: int, config_path: str | None):
-    """Ingest a dataset into the Qdrant vector store."""
+@click.option(
+    "--hybrid",
+    is_flag=True,
+    default=False,
+    help="Use hybrid search mode (dense + sparse).",
+)
+@click.option(
+    "--recreate",
+    is_flag=True,
+    default=False,
+    help="Delete existing collection before indexing.",
+)
+def main(
+    dataset: str | None,
+    file_path: str | None,
+    collection: str | None,
+    limit: int,
+    config_path: str | None,
+    hybrid: bool,
+    recreate: bool,
+):
+    """Ingest a dataset or local file into the Qdrant vector store."""
+    if not dataset and not file_path:
+        raise click.UsageError("Either --dataset or --file must be specified.")
+
     config = load_config(config_path)
+
+    if hybrid:
+        config.qdrant.collection_name = config.qdrant.collection_name_hybrid
+    elif collection:
+        config.qdrant.collection_name = collection
+
     ctx = AppContext(config=config)
 
-    console.print(f"[bold]Dataset:[/] {dataset}")
-    console.print(f"[bold]Limit:[/] {limit}")
+    console.print(f"[bold]Source:[/] {dataset or file_path}")
     console.print(f"[bold]Qdrant collection:[/] {config.qdrant.collection_name}")
+    console.print(f"[bold]Mode:[/] {'hybrid' if hybrid else 'dense'}")
     console.print(f"[bold]Chunk size:[/] {config.chunking.chunk_size}")
     console.print()
 
-    # Load documents
-    if dataset == "hotpotqa":
+    # Handle recreate flag
+    if recreate:
+        console.print(
+            f"[bold yellow]Deleting existing collection: {config.qdrant.collection_name}[/]"
+        )
+        try:
+            ctx.qdrant_client.delete_collection(config.qdrant.collection_name)
+            console.print("[bold green]Collection deleted.[/]")
+        except Exception as e:
+            console.print(f"[dim]Collection not found or error: {e}[/]")
+
+    if file_path:
+        documents = load_pdf_file(file_path)
+    elif dataset == "hotpotqa":
         documents = load_hotpotqa(limit=limit)
     else:
         raise click.BadParameter(f"Unknown dataset: {dataset}")
@@ -141,7 +246,7 @@ def main(dataset: str, limit: int, config_path: str | None):
 
     # Index into Qdrant
     console.print(f"\n[bold blue]Indexing {len(documents)} documents into Qdrant...[/]")
-    index_documents(documents, ctx)
+    index_documents(documents, ctx, enable_hybrid=hybrid)
     console.print("[bold green]Indexing complete![/]")
     console.print(
         f"[dim]Verify at: http://{config.qdrant.host}:{config.qdrant.port}/dashboard[/]"

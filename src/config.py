@@ -16,29 +16,25 @@ load_dotenv(_PROJECT_ROOT / ".env")
 
 # Default config path
 DEFAULT_CONFIG_PATH = _PROJECT_ROOT / "configs" / "base.yaml"
+DASHSCOPE_API_KEY_ENV = "DASHSCOPE_API_KEY"
 
 
-class _ApiKeyMixin(BaseModel):
-    """Mixin for configs that resolve an API key from an environment variable."""
-
-    api_key_env: str
-
-    @property
-    def api_key(self) -> str:
-        key = os.getenv(self.api_key_env, "")
-        if not key:
-            raise ValueError(f"API key not found. Set {self.api_key_env}.")
-        return key
+def get_dashscope_api_key() -> str:
+    """Resolve the shared DashScope API key from environment."""
+    key = os.getenv(DASHSCOPE_API_KEY_ENV, "")
+    if not key:
+        raise ValueError(f"API key not found. Set {DASHSCOPE_API_KEY_ENV}.")
+    return key
 
 
-class LLMConfig(_ApiKeyMixin):
+class LLMConfig(BaseModel):
     model_name: str
     api_base: str
     temperature: float
     max_tokens: int
 
 
-class EmbeddingConfig(_ApiKeyMixin):
+class EmbeddingConfig(BaseModel):
     model_name: str
     api_base: str
     dimensions: int
@@ -53,6 +49,7 @@ class QdrantConfig(BaseModel):
     host: str
     port: int
     collection_name: str
+    collection_name_hybrid: str = "hotpotqa_hybrid"
 
 
 class RerankingConfig(BaseModel):
